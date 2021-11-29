@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>4D Tesseract !!!!</title>
+        <meta name="viewport" content="width=device-width">
+    </head>
+    <body>
+        <canvas id="main"></canvas>
+        <form id="controls" oninput="drawInput()">Rotation(of the given planes):<br><br>
+            XY:<br><input type="range" step="any" min="0" max="6.283185307179586" value="0" id="xy"><br> 
+            XZ:<br><input type="range" step="any" min="0" max="6.283185307179586" value="0" id="xz"><br>
+            XW:<br><input type="range" step="any" min="0" max="6.283185307179586" value="0" id="xw"><br>
+            YZ:<br><input type="range" step="any" min="0" max="6.283185307179586" value="0" id="yz"><br>
+            YW:<br><input type="range" step="any" min="0" max="6.283185307179586" value="0" id="yw"><br>
+            ZW:<br><input type="range" step="any" min="0" max="6.283185307179586" value="0" id="zw"><br>
+            
+            <label>Show Colors: </label><input type="checkbox" checked id="col"><br>
+            <label>Use Perspective: </label><input type="checkbox" id="pp"><br>
+            <label>Switch Camera Angle: </label><input type="checkbox" checked id="cam"><br>
+            <button onclick="pre1()" type="button">Preset 1</button><br>
+            <button onclick="pre2()" type="button">Preset 2</button><br>
+            <button onclick="anim()" type="buttton">Auto Animate</button><br>
+        </form>
+        <style>#main{
+            position: absolute;
+            top:0;
+            left:0;
+            background: radial-gradient(circle at center, #555,#000);
+            z-index:2;
+        }
+        #controls{
+            position: absolute;
+            top:0;
+            left:0;
+            padding:5px;
+            z-index:3;
+            color:white;
+        }</style>
+        <script>
+            "use strict";
+
+            function rotateInPlaneFuncGen(axis1,axis2){
+                //creates a func that rotates coords from the origin in the plane of axis1 and axis2 with angle theta from axis1 towards axis2
+                return function(coords,theta){
+                    let a1old=coords[axis1],a2old=coords[axis2];
+                    let newCoord=Array.from(coords);
+                    newCoord[axis1]=a1old*Math.cos(theta)-a2old*Math.sin(theta);
+                    newCoord[axis2]=a1old*Math.sin(theta)+a2old*Math.cos(theta);
+                    return newCoord;
+                }
+            }
+
+            
+            //The 2 axis in the var name show the plane which is rotated and not the plane around which rotation is done 
+            // So, it does not follow the CSS like 3d rotation nomenclature
+            let [rotateXY,rotateXZ,rotateXW,rotateYZ,rotateYW,rotateZW]=[rotateInPlaneFuncGen(0,1),rotateInPlaneFuncGen(0,2),rotateInPlaneFuncGen(0,3),rotateInPlaneFuncGen(1,2),rotateInPlaneFuncGen(1,3),rotateInPlaneFuncGen(2,3)]
+            const tesseractCoords=[];
+            const sideLen=Math.min(500,window.innerHeight,window.innerWidth);
+            for(let i=-1;i<=1;i+=2){
+                for(let j=-1;j<=1;j+=2){
+                    for(let k=-1;k<=1;k+=2){
+                        for(let l=-1;l<=1;l+=2){
+                            tesseractCoords.push([i,j,k,l].map(x=>x*sideLen/2));
+                        }
+                    }
+                }
+            }
+            const linesSet=new Set();
+            const lines=[];
+            for(let i of tesseractCoords){
+                for(let j of tesseractCoords){
+                    if (i==j)continue;
+                    //Use that line only if its length is 2(or very close to it (float errors))
+                    //This is distance formula
+                    if(!(((i[0]-j[0])**2+(i[1]-j[1])**2+(i[2]-j[2])**2+(i[3]-j[3])**2)/sideLen**2*4-4<0.001))continue;
+                    let str=[i,j].map(x=>JSON.stringify(x)).sort().join('to');
+                    if (linesSet.has(str)){
+                        continue;
+                    }
+                    else{
+                        linesSet.add(str);
+                        let color;
+                        for(let m=0;m<4;m++){
+                        if(i[m]-j[m]!=0){
+                            color=['#ff7878','#42f58a','#4287f5','#f5c542'][m];
+                        }
+                    }
+                        let co=[i,j];
+                        co.color=color;
+                        lines.push(co);
+                    }
+                }
+            }
+            
+           
+            let can=document.getElementById("main");
+            let ctx=can.getContext('2d');
+            let [width,height]=[innerWidth,innerHeight];
+            can.width=width*2;
+            can.height=height*2;
+            can.style.height=height+'px';
+            can.style.width=width+'px';
+            let cam=document.getElementById('cam');
+            let pp=document.getElementById('pp');
+            let col=document.getElementById('col');
+            ctx.translate(can.width/2,can.height/2);
+            ctx.scale(1,-1);
+            ctx.strokeStyle='#fff';
+            ctx.lineWidth=5;
+            ctx.fillStyle='rgba(255,0,0,0.3)';
+            function perspective(r){
+                if (!pp.checked){return 1;}
+                return sideLen/Math.sqrt((-sideLen-r[2])**2+(-sideLen-r[3])**2)
+            }
+            function draw(thetas){
+                
+                let hhh=0.7853981633974483;
+                ctx.clearRect(-can.width/2,can.height/2,can.width,-can.height);
+                for(let line of lines){
+                    ctx.beginPath();
+                    
+                    
+                    let rotated=line.map(x=>rotateXY(rotateXZ(rotateXW(rotateYZ(rotateYW(rotateZW(x,thetas.zw),thetas.yw),thetas.yz),thetas.xw),thetas.xz),thetas.xy));
+                    if(cam.checked){
+                        rotated=rotated.map(x=>rotateXY(rotateXZ(rotateXW(rotateYZ(rotateYW(rotateZW(x,hhh),hhh),hhh),hhh),hhh),hhh));
+                    }
+                    ctx.moveTo(rotated[0][0]*perspective(rotated[0]),rotated[0][1]*perspective(rotated[0]));
+                    ctx.lineTo(rotated[1][0]*perspective(rotated[1]),rotated[1][1]*perspective(rotated[1]));
+                    ctx.closePath();
+                    if(col.checked){
+                        ctx.strokeStyle=line.color;
+                    }else{
+                        ctx.strokeStyle='#fff';
+                    }
+                    ctx.stroke();
+                }
+              
+                
+            }
+            let elemDisabled=false;
+            let angles={xy:0,xz:0,xw:0,yz:0,yw:0,zw:0};
+            function anim(){
+                angles.xy+=0.005;
+                angles.xz+=0.01;
+                angles.xw+=0.015;
+                angles.yz+=0.0125;
+                angles.yw+=0.0075;
+                angles.zw+=0.0025;
+                if(!elemDisabled){
+                    for(let elem of document.querySelectorAll("#controls input[type=range],#controls button")){
+                        elem.disabled=true;
+                    }
+                    elemDisabled=true;
+                }
+                draw(angles);
+                for(let elem of document.querySelectorAll("#controls input")){
+                    elem.value=angles[elem.id]%(2*Math.PI);
+
+                }
+                (window.requestAnimationFrame||setTimeout)(anim,0);
+            }
+            function drawInput(){
+                draw({"xy":parseFloat(document.getElementById("xy").value),"xz":parseFloat(document.getElementById("xz").value),"xw":parseFloat(document.getElementById("xw").value),"yz":parseFloat(document.getElementById("yz").value),"yw":parseFloat(document.getElementById("yw").value),"zw":parseFloat(document.getElementById("zw").value)});
+
+            }
+            function pre1(){
+                document.getElementById("xy").value=0;
+                document.getElementById("xz").value=2.61336026050832;
+                document.getElementById("xw").value=0.111206819596099;
+                document.getElementById("yz").value=1.72370570373953;
+                document.getElementById("yw").value=0;
+                document.getElementById("zw").value=0;
+                pp.checked=true;
+                cam.checked=false;
+                drawInput();
+            }
+            function pre2(){
+                document.getElementById("xy").value=0;
+                document.getElementById("xz").value=0;
+                document.getElementById("xw").value=0;
+                document.getElementById("yz").value=0;
+                document.getElementById("yw").value=0;
+                document.getElementById("zw").value=0;
+                pp.checked=false;
+                cam.checked=true;
+                drawInput();
+            }
+            draw(angles);
+            alert("Note: I'm not responsible if you get lost in the 4-dimensional world ;)\n\nNote: Perspective mode looks good only for small angles without switching camera angle.\nCheck the presets for the best visualizations.");
+            
+        </script>
+    </body>
+</html>
